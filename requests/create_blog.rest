@@ -1,0 +1,9 @@
+POST http://localhost:3001/api/blogs
+Content-Type: application/json
+
+{
+    "title": "Postman is good for testing backend",
+    "author": "Nick",
+    "url": "fake-url",
+    "likes": 5
+}
