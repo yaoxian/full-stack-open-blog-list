@@ -75,6 +75,28 @@ test("blog without title or url is not added", async () => {
   await api.post("/api/blogs").send(invalidBlog).expect(400);
 });
 
+test("a blog with valid id can be deleted", async () => {
+  const blogsAtStart = await helper.blogsInDb();
+  const blogsToDelete = blogsAtStart[0];
+
+  await api.delete(`/api/blogs/${blogsToDelete.id}`).expect(204);
+
+  const blogsAtEnd = await helper.blogsInDb();
+
+  assert.strictEqual(blogsAtStart.length, blogsAtEnd.length + 1);
+});
+
+test("a blog with valid id can be updated", async () => {
+  const blogsAtStart = await helper.blogsInDb();
+  const blogsToUpdate = blogsAtStart[0];
+  blogsToUpdate.likes = 777;
+
+  await api
+    .put(`/api/blogs/${blogsToUpdate.id}`)
+    .expect(200)
+    .expect("Content-Type", /application\/json/);
+});
+
 after(async () => {
   await mongoose.connection.close();
 });

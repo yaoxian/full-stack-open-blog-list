@@ -1,9 +1,9 @@
-PUT http://localhost:3001/api/blogs/667006b5473d550d0831045f
+PUT http://localhost:3001/api/blogs
 Content-Type: application/json
 
 {
     "title": "Postman is good for testing backend",
     "author": "Nick",
     "url": "fake-url",
-    "likes": 666
+    "likes": 6
 }
