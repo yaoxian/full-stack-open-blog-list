@@ -1,14 +1,15 @@
-const { test, after, beforeEach } = require("node:test");
+const { test, describe, after, beforeEach } = require("node:test");
 const assert = require("node:assert");
 const supertest = require("supertest");
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 
 const helper = require("./test_helper");
 const app = require("../app");
 const api = supertest(app);
 
 const Blog = require("../models/Blog");
-const { appendFile } = require("node:fs");
+const User = require("../models/User");
 
 beforeEach(async () => {
   await Blog.deleteMany();
@@ -32,58 +33,130 @@ test("blogs' unique identifiers are named id", async () => {
   assert(ids.every((id) => id));
 });
 
-test("a valid blog can be added", async () => {
-  const newBlog = {
-    title: "Test Blog",
-    author: "Test Author",
-    url: "Fake-Url.com",
-    likes: 100,
-  };
+describe("deleting blog", () => {
+  beforeEach(async () => {
+    await User.deleteMany({});
 
-  await api
-    .post("/api/blogs")
-    .send(newBlog)
-    .expect(201)
-    .expect("Content-Type", /application\/json/);
+    const password = "sekret";
+    const username = "root";
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = new User({ username, passwordHash });
 
-  const blogsAtEnd = await helper.blogsInDb();
-  assert.strictEqual(blogsAtEnd.length, helper.blogs.length + 1);
+    await user.save();
 
-  const content = blogsAtEnd.map((b) => b.title);
-  assert(content.includes("Test Blog"));
+    const loginResponse = await api
+      .post("/api/login")
+      .send({ username, password });
+
+    token = loginResponse.body.token;
+
+    const newBlog = {
+      title: "Initial Blog",
+      author: "Initial Author",
+      url: "initial-url.com",
+      likes: 0,
+    };
+
+    const blogResponse = await api
+      .post("/api/blogs")
+      .set("Authorization", `Bearer ${token}`)
+      .send(newBlog);
+
+    initialBlogId = blogResponse.body.id;
+  });
+
+  test("a blog with valid id can be deleted", async () => {
+    const blogsAtStart = await helper.blogsInDb();
+
+    await api
+      .delete(`/api/blogs/${initialBlogId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .expect(204);
+
+    const blogsAtEnd = await helper.blogsInDb();
+
+    assert.strictEqual(blogsAtStart.length, blogsAtEnd.length + 1);
+  });
+
+  test("user without valid token cannot delete a blog", async () => {
+    const blogsAtStart = await helper.blogsInDb();
+
+    await api.delete(`/api/blogs/${initialBlogId}`).expect(401);
+
+    const blogsAtEnd = await helper.blogsInDb();
+
+    assert.strictEqual(blogsAtStart.length, blogsAtEnd.length);
+  });
 });
 
-test("a valid blog with default likes as 0", async () => {
-  const newBlog = {
-    title: "Test Blog",
-    author: "Test Author",
-    url: "Fake-Url.com",
-  };
+describe("adding blog", () => {
+  beforeEach(async () => {
+    await User.deleteMany({});
 
-  const response = await api.post("/api/blogs").send(newBlog);
-  const newBlogLikes = response.body.likes;
-  assert(newBlogLikes === 0);
-});
+    const password = "sekret";
+    const username = "root";
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = new User({ username, passwordHash });
 
-test("blog without title or url is not added", async () => {
-  const invalidBlog = {
-    author: "Test Author",
-    url: "Fake-Url.com",
-    likes: 100,
-  };
+    await user.save();
 
-  await api.post("/api/blogs").send(invalidBlog).expect(400);
-});
+    const loginResponse = await api
+      .post("/api/login")
+      .send({ username, password });
 
-test("a blog with valid id can be deleted", async () => {
-  const blogsAtStart = await helper.blogsInDb();
-  const blogsToDelete = blogsAtStart[0];
+    token = loginResponse.body.token;
+  });
 
-  await api.delete(`/api/blogs/${blogsToDelete.id}`).expect(204);
+  test("a valid blog can be added", async () => {
+    const newBlog = {
+      title: "Test Blog",
+      author: "Test Author",
+      url: "Fake-Url.com",
+      likes: 100,
+    };
 
-  const blogsAtEnd = await helper.blogsInDb();
+    await api
+      .post("/api/blogs")
+      .set("Authorization", `Bearer ${token}`)
+      .send(newBlog)
+      .expect(201)
+      .expect("Content-Type", /application\/json/);
 
-  assert.strictEqual(blogsAtStart.length, blogsAtEnd.length + 1);
+    const blogsAtEnd = await helper.blogsInDb();
+    assert.strictEqual(blogsAtEnd.length, helper.blogs.length + 1);
+
+    const content = blogsAtEnd.map((b) => b.title);
+    assert(content.includes("Test Blog"));
+  });
+
+  test("a valid blog with default likes as 0", async () => {
+    const newBlog = {
+      title: "Test Blog",
+      author: "Test Author",
+      url: "Fake-Url.com",
+    };
+
+    const response = await api
+      .post("/api/blogs")
+      .set("Authorization", `Bearer ${token}`)
+      .send(newBlog);
+    const newBlogLikes = response.body.likes;
+    assert(newBlogLikes === 0);
+  });
+
+  test("blog without title or url is not added", async () => {
+    const invalidBlog = {
+      author: "Test Author",
+      url: "Fake-Url.com",
+      likes: 100,
+    };
+
+    await api
+      .post("/api/blogs")
+      .set("Authorization", `Bearer ${token}`)
+      .send(invalidBlog)
+      .expect(400);
+  });
 });
 
 test("a blog with valid id can be updated", async () => {
